@@ -6,6 +6,7 @@ on:
     branches:
       - "qa/**"
       - "stable/**"
+      - "dev/py312"
 jobs:
   test:
     name: "Test Python ${{ matrix.python-version }}"
