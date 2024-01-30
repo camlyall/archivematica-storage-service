@@ -18,6 +18,7 @@ jobs:
           "3.9",
           "3.10",
           "3.11",
+          "3.12",
         ]
     steps:
       - name: "Check out repository"
@@ -62,7 +63,6 @@ jobs:
       fail-fast: false
       matrix:
         ubuntu-version: [
-          "20.04",
           "22.04",
         ]
         python-version: [
@@ -70,6 +70,7 @@ jobs:
           "3.9",
           "3.10",
           "3.11",
+          "3.12"
         ]
     steps:
       - name: "Check out repository"
