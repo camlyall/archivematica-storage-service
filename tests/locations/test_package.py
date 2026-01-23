@@ -1544,3 +1544,80 @@ class TestTransferPackage(TestCase):
         package.index_file_data_from_transfer_mets()
         files = models.File.objects.filter(package=package)
         assert files[0].name == "test2/data/objects/foobar.bmp"
+
+
+class TestDeletePointerFileSafety(TestCase):
+    """Test _delete_pointer_file safety checks for S3 reingest bug fix."""
+
+    fixture_files = ["base.json", "package.json"]
+    fixtures = [FIXTURES_DIR / f for f in fixture_files]
+
+    def test_delete_pointer_file_skips_when_uuid_not_in_path(self):
+        """_delete_pointer_file should not delete when UUID doesn't match path.
+
+        This prevents replicas from accidentally deleting their master's pointer
+        file when the replica incorrectly inherited the master's pointer path.
+        """
+        package_uuid = uuid.uuid4()
+        master_uuid = uuid.uuid4()
+        # Create a temp file to ensure we can verify it wasn't deleted
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".xml") as f:
+            pointer_path = f.name
+            f.write(b"<test>pointer file content</test>")
+
+        # pointer_file_path contains master_uuid, not package_uuid
+        pointer_file_path = f"some/path/pointer.{master_uuid}.xml"
+
+        try:
+            # This should NOT delete because package_uuid is not in pointer_file_path
+            models.Package._delete_pointer_file(
+                uuid=package_uuid,
+                pointer_path=pointer_path,
+                pointer_file_path=pointer_file_path,
+                pointer_file_location=None,
+            )
+            # File should still exist
+            assert os.path.exists(pointer_path), (
+                "Pointer file was deleted despite UUID mismatch"
+            )
+        finally:
+            # Clean up
+            if os.path.exists(pointer_path):
+                os.remove(pointer_path)
+
+    def test_delete_pointer_file_deletes_when_uuid_matches(self):
+        """_delete_pointer_file should delete when UUID matches path."""
+        package_uuid = uuid.uuid4()
+        # Create a temp file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".xml") as f:
+            pointer_path = f.name
+            f.write(b"<test>pointer file content</test>")
+
+        # pointer_file_path contains the package_uuid
+        pointer_file_path = f"some/path/pointer.{package_uuid}.xml"
+
+        try:
+            models.Package._delete_pointer_file(
+                uuid=package_uuid,
+                pointer_path=pointer_path,
+                pointer_file_path=pointer_file_path,
+                pointer_file_location=None,
+            )
+            # File should be deleted
+            assert not os.path.exists(pointer_path), (
+                "Pointer file was not deleted despite UUID match"
+            )
+        finally:
+            # Clean up if test failed
+            if os.path.exists(pointer_path):
+                os.remove(pointer_path)
+
+    def test_delete_pointer_file_handles_none_path(self):
+        """_delete_pointer_file should handle None pointer_path gracefully."""
+        # This should not raise any exceptions
+        models.Package._delete_pointer_file(
+            uuid=uuid.uuid4(),
+            pointer_path=None,
+            pointer_file_path=None,
+            pointer_file_location=None,
+        )
