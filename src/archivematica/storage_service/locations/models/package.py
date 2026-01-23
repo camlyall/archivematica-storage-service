@@ -719,6 +719,20 @@ class Package(models.Model):
                 replica_pointer_file, replica_package.full_pointer_file_path
             )
             replica_package.save()
+        else:
+            # Master has no pointer file - clear inherited attributes from clone.
+            # This prevents replicas from incorrectly sharing the master's pointer
+            # file path, which can lead to accidental deletion of the master's
+            # pointer file when replicas are deleted (e.g., during reingest).
+            LOGGER.info(
+                "Master package %s has no pointer file; clearing inherited "
+                "pointer file attributes from replica package %s",
+                self.uuid,
+                replica_package.uuid,
+            )
+            replica_package.pointer_file_path = None
+            replica_package.pointer_file_location = None
+            replica_package.save()
 
         # Copy replicandum AIP from the SS to replica package's replicator
         # location.
