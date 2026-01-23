@@ -2106,9 +2106,28 @@ class Package(models.Model):
     def _delete_pointer_file(
         uuid, pointer_path, pointer_file_path, pointer_file_location
     ):
-        """Delete pointer file and UUID quad directories."""
+        """Delete pointer file and UUID quad directories.
+
+        Only deletes if the pointer file actually belongs to this package
+        (UUID must be present in the pointer file path). This prevents
+        accidentally deleting another package's pointer file, e.g., when
+        a replica incorrectly inherited its master's pointer file path.
+        """
         if not pointer_path:
             return
+
+        # Safety check: verify the pointer file belongs to this package.
+        # Pointer files follow the naming convention pointer.<UUID>.xml
+        expected_uuid_str = str(uuid)
+        if pointer_file_path and expected_uuid_str not in pointer_file_path:
+            LOGGER.warning(
+                "Not deleting pointer file %s for package %s - UUID not found "
+                "in path (pointer may belong to a different package)",
+                pointer_path,
+                uuid,
+            )
+            return
+
         try:
             os.remove(pointer_path)
         except OSError:
@@ -2118,9 +2137,10 @@ class Package(models.Model):
                 uuid,
                 exc_info=True,
             )
-        utils.removedirs(
-            os.path.dirname(pointer_file_path), base=pointer_file_location.full_path
-        )
+        if pointer_file_location:
+            utils.removedirs(
+                os.path.dirname(pointer_file_path), base=pointer_file_location.full_path
+            )
 
     @staticmethod
     def _update_storage_size(space, location, size):
