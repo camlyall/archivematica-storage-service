@@ -263,3 +263,26 @@ class S3(models.Model):
 
         with open(data, "rb") as d:
             bucket.upload_fileobj(d, path, ExtraArgs=extra_args)
+
+    def isfile(self, path):
+        """Check if path exists as a file in the S3 bucket.
+
+        Uses HEAD request for efficiency rather than listing objects.
+        This method is needed for proper handling of pointer files for
+        S3-stored AIPs.
+
+        :param path: Full path to check (leading slash will be stripped)
+        :returns: True if path exists as a file, False otherwise
+        """
+        path = path.lstrip("/")
+        if not path:
+            return False
+
+        try:
+            self.resource.meta.client.head_object(Bucket=self.bucket_name, Key=path)
+            return True
+        except botocore.exceptions.ClientError as err:
+            error_code = err.response["Error"]["Code"]
+            if error_code == "404":
+                return False
+            raise StorageException(f"Error checking if file exists in S3: {err}")

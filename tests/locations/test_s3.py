@@ -348,3 +348,80 @@ def test_delete_path_deletes_package(resource, s3_space, caplog):
         "S3 response when attempting to delete:",
         "{'success': True}",
     ]
+
+
+@pytest.mark.django_db
+@mock.patch(
+    "boto3.resource",
+    return_value=mock.Mock(**{"meta.client.head_object.return_value": {}}),
+)
+def test_isfile_returns_true_for_existing_file(resource, s3_space):
+    """Test isfile returns True when the S3 object exists."""
+    result = s3_space.isfile("aips/myaip.7z")
+
+    assert result is True
+    resource.return_value.meta.client.head_object.assert_called_once_with(
+        Bucket=s3_space.bucket_name, Key="aips/myaip.7z"
+    )
+
+
+@pytest.mark.django_db
+@mock.patch(
+    "boto3.resource",
+    return_value=mock.Mock(
+        **{
+            "meta.client.head_object.side_effect": botocore.exceptions.ClientError(
+                {"Error": {"Code": "404", "Message": "Not Found"}},
+                "HeadObject",
+            )
+        }
+    ),
+)
+def test_isfile_returns_false_for_nonexistent(resource, s3_space):
+    """Test isfile returns False when the S3 object does not exist."""
+    result = s3_space.isfile("aips/nonexistent.7z")
+
+    assert result is False
+
+
+@pytest.mark.django_db
+@mock.patch(
+    "boto3.resource",
+    return_value=mock.Mock(**{"meta.client.head_object.return_value": {}}),
+)
+def test_isfile_handles_leading_slash(resource, s3_space):
+    """Test isfile properly strips leading slashes from paths."""
+    result = s3_space.isfile("/aips/myaip.7z")
+
+    assert result is True
+    # Verify the leading slash was stripped before the API call
+    resource.return_value.meta.client.head_object.assert_called_once_with(
+        Bucket=s3_space.bucket_name, Key="aips/myaip.7z"
+    )
+
+
+@pytest.mark.django_db
+@mock.patch(
+    "boto3.resource",
+    return_value=mock.Mock(
+        **{
+            "meta.client.head_object.side_effect": botocore.exceptions.ClientError(
+                {"Error": {"Code": "403", "Message": "Access Denied"}},
+                "HeadObject",
+            )
+        }
+    ),
+)
+def test_isfile_raises_on_other_errors(resource, s3_space):
+    """Test isfile raises StorageException for non-404 errors."""
+    with pytest.raises(
+        models.StorageException, match="Error checking if file exists in S3"
+    ):
+        s3_space.isfile("aips/restricted.7z")
+
+
+@pytest.mark.django_db
+def test_isfile_returns_false_for_empty_path(s3_space):
+    """Test isfile returns False for empty paths."""
+    assert s3_space.isfile("") is False
+    assert s3_space.isfile("/") is False
