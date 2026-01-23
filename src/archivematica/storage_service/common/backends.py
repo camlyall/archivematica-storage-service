@@ -1,13 +1,11 @@
-import json
 from typing import Any
-from typing import Optional
 
+import jwt
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpRequest
 from django_cas_ng.backends import CASBackend
-from josepy.jws import JWS
 from mozilla_django_oidc.auth import OIDCAuthenticationBackend
 
 from archivematica.storage_service.administration import roles
@@ -120,9 +118,7 @@ class CustomOIDCBackend(OIDCAuthenticationBackend):
         """
 
         def decode_token(token: str) -> Any:
-            sig = JWS.from_compact(token.encode("utf-8"))
-            payload = sig.payload.decode("utf-8")
-            return json.loads(payload)
+            return jwt.decode(token, options={"verify_signature": False})
 
         access_info = decode_token(access_token)
         id_info = decode_token(id_token)
@@ -139,7 +135,7 @@ class CustomOIDCBackend(OIDCAuthenticationBackend):
 
         return info
 
-    def create_user(self, user_info: dict[str, Any]) -> Optional[User]:
+    def create_user(self, user_info: dict[str, Any]) -> User | None:
         """Create a new user when authentication was successful."""
         role = self.get_user_role(user_info)
         if role is None:
@@ -151,7 +147,7 @@ class CustomOIDCBackend(OIDCAuthenticationBackend):
         roles.set_user_role(user, role)
         return user
 
-    def update_user(self, user: User, user_info: dict[str, Any]) -> Optional[User]:
+    def update_user(self, user: User, user_info: dict[str, Any]) -> User | None:
         """
         Updates the user's role only if the setting allows roles to be set from OIDC claims.
         If the setting is False roles are being managed by an admin so do not update the role.
@@ -163,7 +159,7 @@ class CustomOIDCBackend(OIDCAuthenticationBackend):
             roles.set_user_role(user, role)
         return user
 
-    def get_user_role(self, user_info: dict[str, Any]) -> Optional[str]:
+    def get_user_role(self, user_info: dict[str, Any]) -> str | None:
         """
         Returns the highest-permission valid role found in the OIDC token claims.
         Returns the default user role if the setting is False.

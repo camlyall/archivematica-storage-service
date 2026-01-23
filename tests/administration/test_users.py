@@ -14,11 +14,11 @@ from archivematica.storage_service.administration import roles
 
 
 def as_reader(user: User) -> None:
-    user.set_role(roles.USER_ROLE_READER)
+    roles.role_user(user).set_role(roles.USER_ROLE_READER)
 
 
 def as_manager(user: User) -> None:
-    user.set_role(roles.USER_ROLE_MANAGER)
+    roles.role_user(user).set_role(roles.USER_ROLE_MANAGER)
 
 
 @pytest.mark.django_db
@@ -26,7 +26,7 @@ def test_list_users(admin_client: Client) -> None:
     """The user list is available to all users."""
     resp = admin_client.get(reverse("administration:user_list"))
 
-    assert "<td>admin@example.com</td>" in resp.content.decode()
+    assert "<td>admin@example.com</td>" in resp.text
 
 
 @pytest.fixture
@@ -56,7 +56,7 @@ def test_create_user_as_admin(
     )
     assert resp.status_code == 200
 
-    assert "<td>demo@example.com</td>" in resp.content.decode()
+    assert "<td>demo@example.com</td>" in resp.text
     assert User.objects.filter(username="demo").exists()
 
 
@@ -82,7 +82,7 @@ def test_create_user_as_non_admin(
     )
     assert resp.status_code == 200
 
-    assert "<td>demo@example.com</td>" not in resp.content.decode()
+    assert "<td>demo@example.com</td>" not in resp.text
     assert not User.objects.filter(username="demo").exists()
 
 
@@ -114,7 +114,7 @@ def test_edit_user_promote_as_manager(
 
     assert list(resp.context["messages"])[0].message == "User information saved."
     user.refresh_from_db()
-    assert user.get_role() == roles.USER_ROLE_MANAGER
+    assert roles.role_user(user).get_role() == roles.USER_ROLE_MANAGER
 
 
 @pytest.mark.django_db
@@ -140,7 +140,7 @@ def test_edit_user_promotion_requires_admin(
     assert resp.status_code == 200
 
     user.refresh_from_db()
-    assert user.get_role() == roles.USER_ROLE_READER
+    assert roles.role_user(user).get_role() == roles.USER_ROLE_READER
 
 
 @pytest.fixture
@@ -174,7 +174,7 @@ def test_user_edit_view_updates_password(
 
     user.refresh_from_db()
     assert user.check_password(new_password)
-    assert "Password changed" in response.content.decode()
+    assert "Password changed" in response.text
 
 
 @pytest.mark.django_db
@@ -200,7 +200,7 @@ def test_user_edit_view_regenerates_api_key(
         )
         assert response.status_code == 200
 
-    assert "User information saved." in response.content.decode()
+    assert "User information saved." in response.text
 
     admin_user_apikey.refresh_from_db()
     assert admin_user_apikey.key == expected_key
@@ -231,4 +231,4 @@ def test_user_edit_view_validates_current_password(
 
     user.refresh_from_db()
     assert user.check_password(current_password)
-    assert "Your current password is incorrect." in response.content.decode()
+    assert "Your current password is incorrect." in response.text

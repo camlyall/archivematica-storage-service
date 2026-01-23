@@ -7,6 +7,7 @@ from pathlib import Path
 from sys import path
 from typing import Any
 
+import django_stubs_ext
 from django.core.exceptions import ImproperlyConfigured
 from django.utils.translation import gettext_lazy as _
 
@@ -19,6 +20,8 @@ try:
     from django_auth_ldap import config as ldap_config
 except ImportError:
     ldap, ldap_config = None, None
+
+django_stubs_ext.monkeypatch()
 
 
 def _get_settings_from_file(path):
@@ -624,6 +627,11 @@ if OIDC_AUTHENTICATION:
             for backend in AUTHENTICATION_BACKENDS
             if backend != "django.contrib.auth.backends.ModelBackend"
         ]
+
+    # mozilla-django-oidc 5.0.2 calls resolve_url(LOGOUT_REDIRECT_URL); Django
+    # defaults it to None, so we set '/' (the library's intended default) to
+    # avoid resolve_url(None) failing.
+    LOGOUT_REDIRECT_URL = environ.get("LOGOUT_REDIRECT_URL", "/")
 
     # AUTH_SERVER = 'https://login.microsoftonline.com/common/v2.0/'
     OIDC_RP_CLIENT_ID = environ.get("OIDC_RP_CLIENT_ID", "")

@@ -1,6 +1,5 @@
 import codecs
 import copy
-import distutils.dir_util
 import importlib.resources
 import json
 import logging
@@ -11,6 +10,7 @@ import subprocess
 import tempfile
 from collections import namedtuple
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 import bagit
@@ -21,6 +21,7 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
+from django_stubs_ext import StrOrPromise
 from lxml import etree
 from metsrw.plugins import premisrw
 
@@ -529,7 +530,9 @@ class Package(models.Model):
         self.current_location.space.update_package_status(self)
         self._update_existing_ptr_loc_info()
 
-    def recover_aip(self, origin_location, origin_path):
+    def recover_aip(
+        self, origin_location, origin_path
+    ) -> tuple[bool | None, list[Any], StrOrPromise]:
         """Recovers an AIP using files at a given location.
 
         Creates a temporary package associated with recovery AIP files within
@@ -554,53 +557,53 @@ class Package(models.Model):
             temp_aip.delete()
             return (success, failures, message)
 
-        origin_space = temp_aip.current_location.space
-        destination_space = self.current_location.space
+        storage_space = self.current_location.space
+        recovery_space = origin_location.space
 
-        # Copy corrupt files to storage service staging
+        # Copy corrupt files to recovery backup directory via recovery staging.
         source_path = os.path.join(
             self.current_location.relative_path, self.current_path
         )
-        destination_path = os.path.join(origin_location.relative_path, "backup")
+        backup_destination_path = os.path.join(origin_location.relative_path, "backup")
 
-        origin_space.move_to_storage_service(
+        storage_space.move_to_storage_service(
             source_path=source_path,
-            destination_path=destination_path,
-            destination_space=destination_space,
+            destination_path=backup_destination_path,
+            destination_space=recovery_space,
         )
-        origin_space.post_move_to_storage_service()
+        storage_space.post_move_to_storage_service()
 
-        # Copy corrupt files from staging to backup directory
-        destination_space.move_from_storage_service(
-            source_path=destination_path,
-            destination_path=destination_path,
+        recovery_space.move_from_storage_service(
+            source_path=backup_destination_path,
+            destination_path=backup_destination_path,
             package=self,
         )
-        destination_space.post_move_from_storage_service(
-            staging_path=None, destination_path=None
+        recovery_space.post_move_from_storage_service(
+            staging_path=None, destination_path=None, package=self
         )
 
-        # Copy recovery files to storage service staging
-        source_path = os.path.join(temp_aip.current_location.relative_path, origin_path)
-        destination_path = os.path.join(
+        # Copy recovery files to storage space via storage staging.
+        recovery_source_path = os.path.join(
+            temp_aip.current_location.relative_path, origin_path
+        )
+        storage_destination_path = os.path.join(
             self.current_location.relative_path, os.path.dirname(self.current_path), ""
         )
 
-        origin_space.move_to_storage_service(
-            source_path=source_path,
-            destination_path=destination_path,
-            destination_space=destination_space,
+        recovery_space.move_to_storage_service(
+            source_path=recovery_source_path,
+            destination_path=storage_destination_path,
+            destination_space=storage_space,
         )
-        origin_space.post_move_to_storage_service()
+        recovery_space.post_move_to_storage_service()
 
-        # Copy recovery files from staging to AIP store
-        destination_space.move_from_storage_service(
-            source_path=destination_path,
-            destination_path=destination_path,
+        storage_space.move_from_storage_service(
+            source_path=storage_destination_path,
+            destination_path=storage_destination_path,
             package=self,
         )
-        destination_space.post_move_from_storage_service(
-            staging_path=None, destination_path=None
+        storage_space.post_move_from_storage_service(
+            staging_path=None, destination_path=None, package=self
         )
 
         temp_aip.delete()
@@ -1930,8 +1933,11 @@ class Package(models.Model):
         self.save()
 
     def check_fixity(
-        self, force_local=False, delete_after=True, verify_correct_package=True
-    ):
+        self,
+        force_local: bool = False,
+        delete_after: bool = True,
+        verify_correct_package: bool = True,
+    ) -> tuple[bool | None, list[Any], StrOrPromise, str | None]:
         """Scans the package to verify its checksums.
 
         This will check if the Space can run a fixity and use that. If not, it will run fixity locally.
@@ -2102,19 +2108,19 @@ class Package(models.Model):
         return report, response
 
     @staticmethod
-    def _if_lockss_notify(space, uuid, attributes):
+    def _if_lockss_notify(space, package):
         """Notify lOM that files will be deleted."""
         if not space.access_protocol == Space.LOM:
             return
-        NUM_FILES = "num_files"
-        if NUM_FILES not in attributes:
+        num_files = package.misc_attributes.get("num_files")
+        if num_files is None:
             return
         lom = space.get_child_space()
         lom.update_service_document()
         delete_lom_ids = [
-            lom._download_url(uuid, idx + 1) for idx in range(attributes[NUM_FILES])
+            lom._download_url(package.uuid, idx + 1) for idx in range(num_files)
         ]
-        return lom._delete_update_lom(delete_lom_ids)
+        return lom._delete_update_lom(package, delete_lom_ids)
 
     @staticmethod
     def _delete_pointer_file(
@@ -2190,7 +2196,7 @@ class Package(models.Model):
                     replica_error,
                 )
 
-    def delete_from_storage(self):
+    def delete_from_storage(self) -> tuple[bool, StrOrPromise | None]:
         """Deletes the package from filesystem and updates metadata.
         Returns (True, None) on success, and (False, error_msg) on failure.
         """
@@ -2200,16 +2206,16 @@ class Package(models.Model):
             True if self.replicated_package else False,
         )
 
-        error = None
+        error: StrOrPromise | None = None
         location = self.current_location
         space = location.space
 
-        error = self._if_lockss_notify(space, self.uuid, self.misc_attributes)
+        error = self._if_lockss_notify(space, self)
 
         try:
             space.delete_path(self.full_path)
         except (StorageException, NotImplementedError, ValueError) as err:
-            return False, err
+            return False, str(err)
 
         self._delete_pointer_file(
             self.uuid,
@@ -3153,7 +3159,7 @@ def _replace_old_metdata_with_reingested(rein_aip_internal_path, old_aip_interna
         internal_metadata_dir,
     )
     if os.path.isdir(internal_metadata_dir):
-        distutils.dir_util.copy_tree(internal_metadata_dir, this_metadata_dir)
+        shutil.copytree(internal_metadata_dir, this_metadata_dir, dirs_exist_ok=True)
 
 
 def _find_compression_event(events):

@@ -13,7 +13,6 @@ import uuid
 from collections import deque
 from collections import namedtuple
 from typing import Any
-from typing import Union
 
 from django import http
 from django.core.exceptions import ObjectDoesNotExist
@@ -104,7 +103,7 @@ def get_all_settings():
     return settings
 
 
-def get_setting(setting, default=None):
+def get_setting(setting: str, default: Any = None) -> Any:
     """Returns the value of 'setting' from models.Settings, 'default' if not found."""
     try:
         setting = models.Settings.objects.get(name=setting)
@@ -649,9 +648,7 @@ def extract_tar(tarpath):
 # ########### OTHER ############
 
 
-def generate_checksum(
-    file_path: Union[str, pathlib.Path], checksum_type: str = "md5"
-) -> Any:
+def generate_checksum(file_path: str | pathlib.Path, checksum_type: str = "md5") -> Any:
     """
     Returns checksum object for `file_path` using `checksum_type`.
 
