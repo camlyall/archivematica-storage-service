@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 
 import boto3
 import botocore
+from boto3.s3.transfer import TransferConfig
 from django.conf import settings
 from django.db import models
 from django.utils.translation import gettext_lazy as _
@@ -87,6 +88,17 @@ class S3(models.Model):
                 )
             self._resource = boto3.resource(**boto_args)
         return self._resource
+
+    @property
+    def transfer_config(self):
+        if not hasattr(self, "_transfer_config"):
+            self._transfer_config = TransferConfig(
+                max_concurrency=settings.S3_TRANSFER_MAX_CONCURRENCY,
+                multipart_threshold=settings.S3_TRANSFER_MULTIPART_THRESHOLD,
+                multipart_chunksize=settings.S3_TRANSFER_MULTIPART_CHUNKSIZE,
+                use_threads=settings.S3_TRANSFER_USE_THREADS,
+            )
+        return self._transfer_config
 
     def _is_global_endpoint(self, url):
         return urlparse(url).netloc == "s3.amazonaws.com"

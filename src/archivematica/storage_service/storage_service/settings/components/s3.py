@@ -15,3 +15,20 @@ try:
 except ValueError:
     err_msg = "S3 timeout value configured incorrectly in the environment - please check the 'S3_TIMEOUTS' variable"
     raise ImproperlyConfigured(err_msg)
+
+def _env_int(name, default):
+    try:
+        return int(environ.get(name, default))
+    except ValueError as err:
+        raise ImproperlyConfigured(
+            f"{name} configured incorrectly in the environment"
+        ) from err
+
+S3_TRANSFER_MAX_CONCURRENCY = _env_int("SS_S3_TRANSFER_MAX_CONCURRENCY", 1)
+S3_TRANSFER_MULTIPART_THRESHOLD = _env_int(
+    "SS_S3_TRANSFER_MULTIPART_THRESHOLD", 8 * 1024 * 1024
+)
+S3_TRANSFER_MULTIPART_CHUNKSIZE = _env_int(
+    "SS_S3_TRANSFER_MULTIPART_CHUNKSIZE", 8 * 1024 * 1024
+)
+S3_TRANSFER_USE_THREADS = True
