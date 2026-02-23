@@ -24,6 +24,14 @@ def _env_int(name, default):
             f"{name} configured incorrectly in the environment"
         ) from err
 
+TRUE_VALUES = {"1", "true", "yes", "on"}
+
+def _env_bool(name, default):
+    raw = environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in TRUE_VALUES
+
 S3_TRANSFER_MAX_CONCURRENCY = _env_int("SS_S3_TRANSFER_MAX_CONCURRENCY", 1)
 S3_TRANSFER_MULTIPART_THRESHOLD = _env_int(
     "SS_S3_TRANSFER_MULTIPART_THRESHOLD", 8 * 1024 * 1024
@@ -31,4 +39,4 @@ S3_TRANSFER_MULTIPART_THRESHOLD = _env_int(
 S3_TRANSFER_MULTIPART_CHUNKSIZE = _env_int(
     "SS_S3_TRANSFER_MULTIPART_CHUNKSIZE", 8 * 1024 * 1024
 )
-S3_TRANSFER_USE_THREADS = True
+S3_TRANSFER_USE_THREADS = _env_bool("SS_S3_TRANSFER_USE_THREADS", False)
