@@ -274,4 +274,4 @@ class S3(models.Model):
             extra_args["ContentType"] = mtype
 
         with open(data, "rb") as d:
-            bucket.upload_fileobj(d, path, ExtraArgs=extra_args)
+            bucket.upload_fileobj(d, path, ExtraArgs=extra_args, Config=self.transfer_config)
